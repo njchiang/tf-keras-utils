@@ -1,1 +1,1 @@
-from metrics_1d import *
+from .metrics_1d import *
