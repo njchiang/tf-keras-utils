@@ -1,3 +1,4 @@
+# this actually won't work with keras... not exactly a keras utility
 import tensorflow as tf
 
 def ae_loss_fn(model, x, y, training=None):
