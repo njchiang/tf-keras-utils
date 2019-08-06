@@ -16,7 +16,7 @@ class PearsonCorrelation(tf.keras.metrics.Metric):
     sum(x * y) - n * mx * my
     -----------------------
     """
-    def __init__(self,  name="pearson_correlation", **kwargs):
+    def __init__(self,  name="pearson_correlation", eps=1e-7, **kwargs):
         super(PearsonCorrelation, self).__init__(name=name, **kwargs)
         self._sample_count = self.add_weight("n_samples", initializer="zeros")
         self._true_sum = self.add_weight("sum_labels", initializer="zeros")
@@ -24,7 +24,7 @@ class PearsonCorrelation(tf.keras.metrics.Metric):
         self._prod_sum = self.add_weight("sum_products", initializer="zeros")
         self._true_ssq = self.add_weight("ssq_labels", initializer="zeros")
         self._pred_ssq = self.add_weight("ssq_preds", initializer="zeros")
-
+        self._eps = eps
         self.pearson_correlation = self.add_weight(name="pearson", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
@@ -43,7 +43,7 @@ class PearsonCorrelation(tf.keras.metrics.Metric):
         numerator = (self._prod_sum * self._sample_count) - (self._true_sum * self._pred_sum)  
         sx = tf.sqrt((self._sample_count * self._true_ssq) - tf.pow(self._true_sum, 2))
         sy = tf.sqrt((self._sample_count * self._pred_ssq) - tf.pow(self._pred_sum, 2)) 
-        denominator = sx * sy
+        denominator = (sx * sy) + self._eps
 
         self.pearson_correlation.assign(numerator / denominator)
     
@@ -65,16 +65,17 @@ class PercentRMSDifference(tf.keras.metrics.Metric):
     Used in Yildirim et al., 2018 
     sqrt(sum((y_true - y_pred)**2) / sum(y_true ** 2))
     """
-    def __init__(self, name="percent_rms_diff", **kwargs):
+    def __init__(self, name="percent_rms_diff", eps=1e-7, **kwargs):
         super(PercentRMSDifference, self).__init__(name=name, **kwargs)
         self._ssq_diff = self.add_weight(name="ssq_diff", initializer="zeros")
         self._ssq_val = self.add_weight(name="ssq_val", initializer="zeros")
         self.prd = self.add_weight(name="prd", initializer="zeros")
+        self._eps = eps
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         self._ssq_diff.assign_add(tf.reduce_sum(tf.pow(y_true - y_pred, 2)))
         self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2)))
-        prd = 100. * tf.sqrt(self._ssq_diff / self._ssq_val)
+        prd = 100. * tf.sqrt(self._ssq_diff / (self._ssq_val + self._eps))
         self.prd.assign(prd)
 
     def result(self):
@@ -102,9 +103,14 @@ class PRDNormalized(PercentRMSDifference):
         self._true_sum.assign_add(tf.reduce_sum(y_true))
 
         self._ssq_diff.assign_add(tf.reduce_sum(tf.pow(y_true - y_pred, 2)))
-        self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2) - self._sample_count * tf.pow(self._true_sum, 2)))
-        
-        prdn = 100. * tf.sqrt(self._ssq_diff / self._ssq_val)
+
+        # TODO : This is wrong
+        # self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2) - self._sample_count * tf.pow(self._true_sum, 2)))
+        # E(X^2) - E(X)^2
+        self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2) - tf.pow(self._true_sum, 2)))
+
+
+        prdn = 100. * tf.sqrt(self._ssq_diff / (self._ssq_val + self._eps))
         self.prdn.assign(prdn)
 
     def result(self):
@@ -128,7 +134,7 @@ class SignalNoiseRatio(PRDNormalized):
        
     def update_state(self, y_true, y_pred, sample_weight=None):
         super().update_state(y_true, y_pred, sample_weight)
-        snr = 10. * tf.math.log(self._ssq_val / self._ssq_diff)
+        snr = 10. * tf.math.log(self._ssq_val / (self._ssq_diff + self._eps))
         self.snr.assign(snr)
     
     def result(self):
