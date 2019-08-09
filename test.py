@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-import losses
-import metrics
+from tfutils import losses
+from tfutils import metrics
 
 
 def main():
