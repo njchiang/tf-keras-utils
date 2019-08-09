@@ -6,6 +6,7 @@ def ae_loss_fn(model, x, y, training=None):
     mse = tf.keras.losses.MSE(y, pred)
     return tf.reduce_mean(mse), pred
 
+# function is untested
 def vae_loss_fn(model, x, y, training=None):
     z, m, v = model.encoder(x, training)
     pred = model.decoder(z)
