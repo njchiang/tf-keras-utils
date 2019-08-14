@@ -3,7 +3,7 @@ import tensorflow as tf
 from absl import logging
 
 
-def keras_train(ds, model, loss_fn, opt, epochs, steps_per_epoch=None, log_every=100, save_every=-1, checkpoint_dir="/tmp", initial_epoch=0, metrics=None):
+def keras_train(ds, model, loss_fn, opt, epochs, val_ds=None, steps_per_epoch=None, log_every=100, save_every=-1, checkpoint_dir="/tmp", initial_epoch=0, metrics=None):
     checkpoint_path = os.path.join(checkpoint_dir, "cp-{epoch:04d}.ckpt")
     log_dir = os.path.join(checkpoint_dir, "logs")
     # This is weird because epoch is not recovered...
@@ -29,7 +29,7 @@ def keras_train(ds, model, loss_fn, opt, epochs, steps_per_epoch=None, log_every
     model.compile(opt, loss=loss_fn, metrics=keras_metrics)
     for e in range(initial_epoch, initial_epoch + epochs):
         # TODO : one patient per epoch?
-        _ = model.fit(ds.dataset, epochs=e+1, callbacks=callbacks, initial_epoch=e, verbose=2, steps_per_epoch=steps_per_epoch)
+        _ = model.fit(ds.dataset, epochs=e+1, validation_data=val_ds.dataset, validation_steps=steps_per_epoch, callbacks=callbacks, initial_epoch=e, verbose=2, steps_per_epoch=steps_per_epoch)
         with open(os.path.join(checkpoint_dir, "EPOCH"), "w") as f:
             f.write(str(e+1))
 
