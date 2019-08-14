@@ -13,7 +13,11 @@ import tensorflow as tf
 class PearsonCorrelation(tf.keras.metrics.Metric):
     """ 
     streaming pearson correlation
-    sum(x * y) - n * mx * my
+    values to cache: sum of squared error
+    n *sum(x * y) - n * mx * my
+
+    formula = (n * sum(xi * yi) - sum(xi) * sum(yi)) / 
+    (sqrt(n * sum(xi**2) - (sum(xi))**2) * sqrt(n * sum(yi**2) - (sum(yi) ** 2)))
     -----------------------
     """
     def __init__(self,  name="pearson_correlation", eps=1e-7, **kwargs):
@@ -28,9 +32,10 @@ class PearsonCorrelation(tf.keras.metrics.Metric):
         self.pearson_correlation = self.add_weight(name="pearson", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        # y_true = tf.reshape(y_true, (-1, 1))
-        # y_pred = tf.reshape(y_pred, (-1, 1))
-        self._sample_count.assign_add(tf.cast(tf.shape(y_true)[0], tf.float32))
+        y_true = tf.reshape(y_true, (1, -1))
+        y_pred = tf.reshape(y_pred, (1, -1))
+        self._sample_count.assign_add(tf.cast(tf.shape(y_true)[1], tf.float32))
+        # self._sample_count.assign_add(tf.cast(tf.shape(y_true)[0], tf.float32))
         self._true_sum.assign_add(tf.reduce_sum(y_true))
         self._pred_sum.assign_add(tf.reduce_sum(y_pred))
         self._prod_sum.assign_add(tf.reduce_sum(y_true * y_pred))
@@ -73,6 +78,8 @@ class PercentRMSDifference(tf.keras.metrics.Metric):
         self._eps = eps
 
     def update_state(self, y_true, y_pred, sample_weight=None):
+        y_true = tf.reshape(y_true, (1, -1))
+        y_pred = tf.reshape(y_pred, (1, -1))
         self._ssq_diff.assign_add(tf.reduce_sum(tf.pow(y_true - y_pred, 2)))
         self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2)))
         prd = 100. * tf.sqrt(self._ssq_diff / (self._ssq_val + self._eps))
@@ -97,18 +104,17 @@ class PRDNormalized(PercentRMSDifference):
         self.prdn = self.add_weight(name="prdn", initializer="zeros")
         self._sample_count = self.add_weight("n_samples", initializer="zeros")
         self._true_sum = self.add_weight("true_sum", initializer="zeros")
+        self._squared_sum = self.add_weight("true_sq_sum", initializer="zeros")
 
     def update_state(self, y_true, y_pred, sample_weight=None):
-        self._sample_count.assign_add(tf.cast(tf.shape(y_true)[0], tf.float32))
+        y_true = tf.reshape(y_true, (1, -1))
+        y_pred = tf.reshape(y_pred, (1, -1))
+        self._sample_count.assign_add(tf.cast(tf.shape(y_true)[1], tf.float32))
         self._true_sum.assign_add(tf.reduce_sum(y_true))
-
+        self._squared_sum.assign_add(tf.reduce_sum(tf.pow(y_true, 2)))
         self._ssq_diff.assign_add(tf.reduce_sum(tf.pow(y_true - y_pred, 2)))
 
-        # TODO : This is wrong
-        # self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2) - self._sample_count * tf.pow(self._true_sum, 2)))
-        # E(X^2) - E(X)^2
-        self._ssq_val.assign_add(tf.reduce_sum(tf.pow(y_true, 2) - tf.pow(self._true_sum, 2)))
-
+        self._ssq_val.assign_add(tf.reduce_sum(self._squared_sum - tf.pow(self._true_sum, 2) / self._sample_count))
 
         prdn = 100. * tf.sqrt(self._ssq_diff / (self._ssq_val + self._eps))
         self.prdn.assign(prdn)
